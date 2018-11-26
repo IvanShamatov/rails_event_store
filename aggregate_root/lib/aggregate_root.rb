@@ -1,5 +1,6 @@
 require 'aggregate_root/version'
 require 'aggregate_root/configuration'
+require 'aggregate_root/repository'
 require 'aggregate_root/default_apply_strategy'
 
 module AggregateRoot
@@ -35,18 +36,16 @@ module AggregateRoot
   end
 
   def load(stream_name, event_store: default_event_store)
+    @repo ||= AggregateRoot::Repository.new(event_store)
+    @repo.load(self, stream_name)
     @loaded_from_stream_name = stream_name
-    events_enumerator(event_store, stream_name).with_index do |event, index|
-      apply(event)
-      @version = index
-    end
-    @unpublished_events = nil
+    @unpublished_events      = nil
     self
   end
 
   def store(stream_name = loaded_from_stream_name, event_store: default_event_store)
-    event_store.publish(unpublished, stream_name: stream_name, expected_version: version)
-    @version += unpublished_events.size
+    @repo ||= AggregateRoot::Repository.new(event_store)
+    @repo.store(self, stream_name)
     @unpublished_events = nil
   end
 
@@ -58,10 +57,6 @@ module AggregateRoot
 
   def unpublished
     @unpublished_events ||= []
-  end
-
-  def version
-    @version ||= -1
   end
 
   def apply_strategy
